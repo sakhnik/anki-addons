@@ -6,41 +6,64 @@ from aqt.utils import tooltip, shortcut
 from aqt.qt import QAction
 
 
+# Copy direction: from the eldest to the youngest
+names = ['Yaryna', 'Solia', 'Daryna']
+
+
 def copy_note(nid):
     """."""
     note = mw.col.getNote(nid)
     model = note.model()
-    if model['name'] != "English Yaryna":
+    # Let's assume all the cards belong to the same deck for now
+    src_deck = mw.col.decks.get(note.cards()[0].did)
+    src_deck_name = src_deck["name"]
+
+    # Source card type
+    src_type = model['name']
+    src_name = src_type.split()[-1]
+    src_index = names.index(src_name)
+
+    # Sanity checks
+    if src_index == -1:
         word = note["Front"]
-        tooltip(f"Not Yaryna's card: {word}", period=2000)
+        tooltip(f"Not one of {','.join(names)}: {word}", period=2000)
         return
-    if 'solia' in note.tags:
+    if src_index > len(names) - 2:
+        word = note["Front"]
+        tooltip(f"Can't copy from {names[-1]}: {word}", period=2000)
+        return
+
+    # Destination card type
+    dst_name = names[src_index + 1]
+    dst_tag = dst_name.lower()
+
+    if dst_tag in note.tags:
         word = note["Front"]
         tooltip(f"Already copied: {word}", period=2000)
         return
 
     # Assign model to deck
-    solia_deck = mw.col.decks.byName("English::Solia")
-    solia_type = mw.col.models.byName("English Solia")
-    mw.col.decks.select(solia_deck['id'])
-    solia_deck['mid'] = solia_type['id']
-    mw.col.decks.save(solia_deck)
+    dst_deck = mw.col.decks.byName(src_deck_name.replace(src_name, dst_name))
+    dst_type = mw.col.models.byName(src_type.replace(src_name, dst_name))
+    mw.col.decks.select(dst_deck['id'])
+    dst_deck['mid'] = dst_type['id']
+    mw.col.decks.save(dst_deck)
     # Assign deck to model
-    mw.col.models.setCurrent(solia_type)
-    mw.col.models.current()['did'] = solia_deck['id']
-    mw.col.models.save(solia_type)
+    mw.col.models.setCurrent(dst_type)
+    mw.col.models.current()['did'] = dst_deck['id']
+    mw.col.models.save(dst_type)
 
     new_note = mw.col.newNote()
     new_note.fields = note.fields
     new_note.tags = note.tags
     print(new_note)
-    mw.col.add_note(new_note, solia_deck['id'])
+    mw.col.add_note(new_note, dst_deck['id'])
 
-    note.tags.append('solia')
+    note.tags.append(dst_tag)
     note.flush()
 
 
-def copy_for_solia(browser):
+def copy_for_younger(browser):
     """."""
     nids = browser.selectedNotes()
     if not nids:
@@ -49,7 +72,7 @@ def copy_for_solia(browser):
 
     # Set checkpoint
     mw.progress.start()
-    mw.checkpoint("Copy Notes for Solia")
+    mw.checkpoint("Copy Notes for younger")
     browser.model.beginReset()
 
     for nid in nids:
@@ -65,9 +88,9 @@ def copy_for_solia(browser):
 
 def setup_actions(browser):
     """."""
-    action = QAction("Copy for Solia", browser)
+    action = QAction("Copy for younger", browser)
     action.setShortcut(shortcut("Alt+D"))
-    action.triggered.connect(lambda: copy_for_solia(browser))
+    action.triggered.connect(lambda: copy_for_younger(browser))
     browser.form.menu_Cards.addSeparator()
     browser.form.menu_Cards.addAction(action)
 
