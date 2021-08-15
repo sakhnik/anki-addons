@@ -24,6 +24,14 @@ def copy_tags_preserving_private(src, dst):
                   [t for t in src if t not in PRIVATE_TAGS])
 
 
+def determine_child_index(card_type):
+    """Determine child index from the card type."""
+    for idx, name in enumerate(names):
+        if name in card_type:
+            return idx
+    return -1
+
+
 def copy_note(nid):
     """."""
     note = mw.col.getNote(nid)
@@ -34,8 +42,7 @@ def copy_note(nid):
 
     # Source card type
     src_type = model['name']
-    src_name = src_type.split()[-1]
-    src_index = names.index(src_name)
+    src_index = determine_child_index(src_type)
 
     # Sanity checks
     if src_index == -1:
@@ -46,6 +53,8 @@ def copy_note(nid):
         word = note["Front"]
         tooltip(f"Can't copy from {names[-1]}: {word}", period=2000)
         return
+
+    src_name = names[src_index]
 
     # Destination card type
     dst_name = names[src_index + 1]
@@ -129,7 +138,8 @@ def synchronize_child(child_name, src_mid, dst_mid):
         src_tags = get_nonprivate_tags(src_note.tags)
         dst_tags = get_nonprivate_tags(note.tags)
         if src_tags != dst_tags:
-            print(f"Synchronize tags: {src_note.tags} -> {note.tags}")
+            print(f"Synchronize tags for {front_field}:"
+                  + " {src_note.tags} -> {note.tags}")
             note.tags = copy_tags_preserving_private(src_note.tags, note.tags)
             changed = True
         # Commit finally
@@ -157,15 +167,12 @@ def synchronize_younger(browser):
         mname = mid_name.name
         if "English" not in mname:
             continue
-        child_name = mname.split()[-1]
-        try:
-            child_index = names.index(child_name)
-            if child_index > 0:
-                src_mname = mname.replace(child_name, names[0])
-                src_mid = mw.col.models.id_for_name(src_mname)
-                synchronize_child(child_name, src_mid, mid_name.id)
-        except ValueError:
-            pass
+        child_index = determine_child_index(mname)
+        if child_index > 0:
+            child_name = names[child_index]
+            src_mname = mname.replace(child_name, names[0])
+            src_mid = mw.col.models.id_for_name(src_mname)
+            synchronize_child(child_name, src_mid, mid_name.id)
 
     # Reset collection and main window
     browser.model.endReset()
