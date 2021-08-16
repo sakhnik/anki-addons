@@ -1,10 +1,12 @@
 """."""
 
+from anki.notes import NoteId
 import aqt
 from aqt import mw
 from aqt.operations import CollectionOp
 from aqt.utils import tooltip, shortcut
 from aqt.qt import QAction
+from typing import List
 
 
 # Copy direction: from the eldest to the youngest
@@ -14,18 +16,19 @@ names = ['Yaryna', 'Solia', 'Daryna']
 PRIVATE_TAGS = ['leech'] + [t.lower() for t in names]
 
 
-def get_nonprivate_tags(tags):
+def get_nonprivate_tags(tags: List[str]) -> List[str]:
     """Filter out well known tags."""
     return [t for t in tags if t not in PRIVATE_TAGS]
 
 
-def copy_tags_preserving_private(src, dst):
+def copy_tags_preserving_private(src: List[str],
+                                 dst: List[str]) -> List[str]:
     """Copy the shared tags from src preserving the private tags from dst."""
     return sorted([t for t in dst if t in PRIVATE_TAGS] +
                   [t for t in src if t not in PRIVATE_TAGS])
 
 
-def determine_child_index(card_type):
+def determine_child_index(card_type: str) -> int:
     """Determine child index from the card type."""
     for idx, name in enumerate(names):
         if name in card_type:
@@ -33,12 +36,12 @@ def determine_child_index(card_type):
     return -1
 
 
-def copy_note(nid):
+def copy_note(col: aqt.Collection, nid: NoteId):
     """."""
-    note = mw.col.getNote(nid)
-    model = note.model()
+    note = col.get_note(nid)
+    model = note.note_type()
     # Let's assume all the cards belong to the same deck for now
-    src_deck = mw.col.decks.get(note.cards()[0].did)
+    src_deck = col.decks.get(note.cards()[0].did)
     src_deck_name = src_deck["name"]
 
     # Source card type
@@ -49,11 +52,11 @@ def copy_note(nid):
     if src_index == -1:
         word = note["Front"]
         tooltip(f"Not one of {','.join(names)}: {word}", period=2000)
-        return
+        return []
     if src_index > len(names) - 2:
         word = note["Front"]
         tooltip(f"Can't copy from {names[-1]}: {word}", period=2000)
-        return
+        return []
 
     src_name = names[src_index]
 
@@ -64,50 +67,43 @@ def copy_note(nid):
     if dst_tag in note.tags:
         word = note["Front"]
         tooltip(f"Already copied: {word}", period=2000)
-        return
+        return []
 
     # Assign model to deck
-    dst_deck = mw.col.decks.byName(src_deck_name.replace(src_name, dst_name))
-    dst_type = mw.col.models.byName(src_type.replace(src_name, dst_name))
-    mw.col.decks.select(dst_deck['id'])
-    dst_deck['mid'] = dst_type['id']
-    mw.col.decks.save(dst_deck)
-    # Assign deck to model
-    mw.col.models.setCurrent(dst_type)
-    mw.col.models.current()['did'] = dst_deck['id']
-    mw.col.models.save(dst_type)
+    dst_deck = col.decks.by_name(src_deck_name.replace(src_name, dst_name))
+    dst_type = col.models.by_name(src_type.replace(src_name, dst_name))
+    col.decks.select(dst_deck['id'])
 
-    new_note = mw.col.newNote()
+    new_note = col.new_note(dst_type)
     new_note.fields = note.fields
     new_note.tags = copy_tags_preserving_private(note.tags, [])
     print(new_note)
-    mw.col.add_note(new_note, dst_deck['id'])
+    col.add_note(new_note, dst_deck['id'])
+    col.decks.save(dst_deck)
 
     note.tags.append(dst_tag)
-    note.flush()
+    col.update_note(note)
 
 
-def copy_for_younger(browser):
+def copy_for_younger(col: aqt.Collection, browser):
     """."""
+    # Set checkpoint
+    pos = col.add_custom_undo_entry("copy younger")
+
     nids = browser.selectedNotes()
     if not nids:
         tooltip("No notes selected.", period=2000)
-        return
-
-    # Set checkpoint
-    mw.progress.start()
-    mw.checkpoint("Copy Notes for younger")
-    browser.model.beginReset()
+        return col.merge_undo_entries(pos)
 
     for nid in nids:
-        copy_note(nid)
+        copy_note(col, nid)
 
-    # Reset collection and main window
-    browser.model.endReset()
-    mw.progress.finish()
-    mw.col.reset()
-    mw.reset()
-    browser.col.save()
+    # Commit the changes
+    return col.merge_undo_entries(pos)
+
+
+def copy_op(*, parent: aqt.QWidget, browser):
+    return CollectionOp(parent, lambda col: copy_for_younger(col, browser))
 
 
 def synchronize_child(col, child_name, src_mid, dst_mid):
@@ -189,10 +185,11 @@ def sync_op(*, parent: aqt.QWidget):
 
 def setup_actions(browser):
     """."""
+    browser.form.menu_Cards.addSeparator()
     action = QAction("Copy for younger", browser)
     action.setShortcut(shortcut("Alt+D"))
-    action.triggered.connect(lambda: copy_for_younger(browser))
-    browser.form.menu_Cards.addSeparator()
+    action.triggered.connect(lambda: copy_op(parent=mw, browser=browser)
+                             .run_in_background())
     browser.form.menu_Cards.addAction(action)
     action = QAction("Synchronize younger", browser)
     action.triggered.connect(lambda: sync_op(parent=mw).run_in_background())
