@@ -139,7 +139,7 @@ def synchronize_child(child_name, src_mid, dst_mid):
         dst_tags = get_nonprivate_tags(note.tags)
         if src_tags != dst_tags:
             print(f"Synchronize tags for {front_field}:"
-                  + " {src_note.tags} -> {note.tags}")
+                  + f" {src_note.tags} -> {note.tags}")
             note.tags = copy_tags_preserving_private(src_note.tags, note.tags)
             changed = True
         # Commit finally
