@@ -189,6 +189,7 @@ def setup_actions(browser):
     action = QAction("Copy for younger", browser)
     action.setShortcut(shortcut("Alt+D"))
     action.triggered.connect(lambda: copy_op(parent=mw, browser=browser)
+                             .success(lambda _: browser.search())
                              .run_in_background())
     browser.form.menu_Cards.addAction(action)
     action = QAction("Synchronize younger", browser)
