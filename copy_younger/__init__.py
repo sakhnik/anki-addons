@@ -2,6 +2,7 @@
 
 import aqt
 from aqt import mw
+from aqt.operations import CollectionOp
 from aqt.utils import tooltip, shortcut
 from aqt.qt import QAction
 
@@ -109,24 +110,25 @@ def copy_for_younger(browser):
     browser.col.save()
 
 
-def synchronize_child(child_name, src_mid, dst_mid):
+def synchronize_child(col, child_name, src_mid, dst_mid):
     """Synchronize all the notes of the model dst_mid taking data
     from the model src_mid."""
-    src_type_name = mw.col.models.get(src_mid)['name']
-    dst_type_name = mw.col.models.get(dst_mid)['name']
+    src_type_name = col.models.get(src_mid)['name']
+    dst_type_name = col.models.get(dst_mid)['name']
     print(f"Synchronizing {dst_type_name}")
+    notes_to_flush = []
     # Iterate over all the notes of the destination model
-    for nid in mw.col.models.nids(dst_mid):
-        note = mw.col.getNote(nid)
+    for nid in col.models.nids(dst_mid):
+        note = col.getNote(nid)
         # Use the field "front" as the search key to find the source note
         front_field = note.fields[0]
         query = f'note:"{src_type_name}" front:"{front_field}"'
-        src_nids = mw.col.find_notes(query)
+        src_nids = col.find_notes(query)
         if len(src_nids) != 1:
             print(f"Can't find the source of {front_field}")
             continue
         # There's the source note
-        src_note = mw.col.getNote(src_nids[0])
+        src_note = col.getNote(src_nids[0])
         changed = False
         # Just overwrite the fields if different
         if src_note.fields != note.fields:
@@ -138,16 +140,18 @@ def synchronize_child(child_name, src_mid, dst_mid):
         src_tags = get_nonprivate_tags(src_note.tags)
         dst_tags = get_nonprivate_tags(note.tags)
         if src_tags != dst_tags:
-            print(f"Synchronize tags for {front_field}:"
-                  + f" {src_note.tags} -> {note.tags}")
+            old_note_tags = note.tags
             note.tags = copy_tags_preserving_private(src_note.tags, note.tags)
             changed = True
+            print(f"Synchronize tags for {front_field}:"
+                  + f" {src_note.tags} -> {old_note_tags} = {note.tags}")
         # Commit finally
         if changed:
-            note.flush()
+            notes_to_flush.append(note)
+    return notes_to_flush
 
 
-def synchronize_younger(browser):
+def synchronize_younger(col):
     """Synchronize the notes assuming the name[0] is the master copy.
 
     When notes evolve, fields and tags may change. We'll iterate over
@@ -157,12 +161,11 @@ def synchronize_younger(browser):
     """
 
     # Set checkpoint
-    mw.progress.start()
-    mw.checkpoint("Synchronize the younger")
-    browser.model.beginReset()
+    pos = col.add_custom_undo_entry("synchronize child")
+    notes_to_flush = []
 
     # Iterate over all the models
-    for mid_name in mw.col.models.all_names_and_ids():
+    for mid_name in col.models.all_names_and_ids():
         # Only English requires synchronization for now
         mname = mid_name.name
         if "English" not in mname:
@@ -171,15 +174,17 @@ def synchronize_younger(browser):
         if child_index > 0:
             child_name = names[child_index]
             src_mname = mname.replace(child_name, names[0])
-            src_mid = mw.col.models.id_for_name(src_mname)
-            synchronize_child(child_name, src_mid, mid_name.id)
+            src_mid = col.models.id_for_name(src_mname)
+            notes_to_flush += synchronize_child(col, child_name, src_mid,
+                                                mid_name.id)
 
-    # Reset collection and main window
-    browser.model.endReset()
-    mw.progress.finish()
-    mw.col.reset()
-    mw.reset()
-    browser.col.save()
+    if notes_to_flush:
+        col.update_notes(notes_to_flush)
+    return col.merge_undo_entries(pos)
+
+
+def sync_op(*, parent: aqt.QWidget):
+    return CollectionOp(parent, lambda col: synchronize_younger(col))
 
 
 def setup_actions(browser):
@@ -190,7 +195,7 @@ def setup_actions(browser):
     browser.form.menu_Cards.addSeparator()
     browser.form.menu_Cards.addAction(action)
     action = QAction("Synchronize younger", browser)
-    action.triggered.connect(lambda: synchronize_younger(browser))
+    action.triggered.connect(lambda: sync_op(parent=mw).run_in_background())
     browser.form.menu_Cards.addAction(action)
 
 
