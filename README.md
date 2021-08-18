@@ -1,5 +1,7 @@
 # Personal Anki addons
 
+[![mypy](https://github.com/sakhnik/anki-addons/actions/workflows/mypy.yml/badge.svg)](https://github.com/sakhnik/anki-addons/actions/workflows/mypy.yml)
+
 ## copy_younger
 
 Copy and maintain cards for younger children. Just duplicates selected cards
