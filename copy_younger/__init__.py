@@ -79,8 +79,9 @@ def copy_note(col: Collection, nid: NoteId):
     dst_deck_name = src_deck_name.replace(src_name, dst_name)
     dst_deck = col.decks.by_name(dst_deck_name)
     if not dst_deck:
-        tooltip(f"No such deck {dst_deck_name}", period=2000)
-        return
+        tooltip(f"No such deck {dst_deck_name}, adding", period=2000)
+        col.decks.add_normal_deck_with_name(dst_deck_name)
+        dst_deck = col.decks.by_name(dst_deck_name)
 
     dst_type_name = src_type.replace(src_name, dst_name)
     dst_type = col.models.by_name(dst_type_name)
