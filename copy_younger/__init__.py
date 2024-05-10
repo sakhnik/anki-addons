@@ -14,7 +14,7 @@ from typing import List
 
 
 # Copy direction: from the eldest to the youngest
-names = ['Yaryna', 'Solia', 'Daryna']
+names = ['Anatolii', 'Sania', 'Yaryna', 'Solia', 'Daryna']
 
 
 PRIVATE_TAGS = ['leech'] + [t.lower() for t in names]
@@ -51,8 +51,10 @@ def copy_note(col: Collection, nid: NoteId):
     src_deck_name = src_deck["name"]
 
     # Source card type
-    src_type = model['name']
-    src_index = determine_child_index(src_type)
+    src_type_name = model['name']
+    src_index = determine_child_index(src_type_name)
+    if src_index == -1:
+        src_index = determine_child_index(src_deck_name)
 
     # Sanity checks
     if src_index == -1:
@@ -83,11 +85,18 @@ def copy_note(col: Collection, nid: NoteId):
         col.decks.add_normal_deck_with_name(dst_deck_name)
         dst_deck = col.decks.by_name(dst_deck_name)
 
-    dst_type_name = src_type.replace(src_name, dst_name)
+    dst_type_name = src_type_name.replace(src_name, dst_name)
+    if dst_type_name == src_type_name:
+        dst_type_name = f"{src_type_name}-{dst_name}"
+    src_type = col.models.by_name(src_type_name)
     dst_type = col.models.by_name(dst_type_name)
     if not dst_type:
-        tooltip(f"No such note type {dst_type_name}", period=2000)
-        return
+        tooltip(f"No such note type {dst_type_name}, adding", period=2000)
+        dst_type = src_type.copy()
+        dst_type["name"] = dst_type_name
+        dst_type["id"] = 0
+        col.models.add_dict(dst_type)
+        dst_type = col.models.by_name(dst_type_name)
 
     col.decks.select(dst_deck['id'])
 
