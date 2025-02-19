@@ -170,8 +170,7 @@ def synchronize_child(col: Collection, child_name: str,
             old_note_tags = note.tags
             note.tags = copy_tags_preserving_private(src_note.tags, note.tags)
             changed = True
-            print(f"Synchronize tags for {front_field}:"
-                  + f" {src_note.tags} -> {old_note_tags} = {note.tags}")
+            print(f"Synchronize tags for {front_field}: {src_note.tags} -> {old_note_tags} = {note.tags}")
         # Commit finally
         if changed:
             notes_to_flush.append(note)
@@ -179,13 +178,15 @@ def synchronize_child(col: Collection, child_name: str,
 
 
 def synchronize_younger(col: Collection) -> OpChanges:
-    """Synchronize the notes assuming the name[0] is the master copy.
+    """Synchronize the notes assuming the names[2] is the master copy.
 
     When notes evolve, fields and tags may change. We'll iterate over
     the younger children cards and copy the fields from the master copy.
     The tags need to be carefully merged though to avoid messing with
     "leach", "solia" etc.
     """
+
+    master_child_idx = 2
 
     # Set checkpoint
     pos = col.add_custom_undo_entry("Synchronize child")
@@ -199,9 +200,9 @@ def synchronize_younger(col: Collection) -> OpChanges:
         if "English" not in mname:
             continue
         child_index = determine_child_index(mname)
-        if child_index > 0:
+        if child_index > master_child_idx:
             child_name = names[child_index]
-            src_mname = mname.replace(child_name, names[0])
+            src_mname = mname.replace(child_name, names[master_child_idx])
             src_mid = col.models.id_for_name(src_mname)
             if not src_mid:
                 continue
